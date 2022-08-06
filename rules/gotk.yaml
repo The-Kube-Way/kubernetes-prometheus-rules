@@ -1,0 +1,24 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: gotk  # aka Flux2
+  namespace: prometheus
+spec:
+  groups:
+  - name: gotk
+    rules:
+    - alert: noGotkMetrics
+      expr: absent(gotk_reconcile_condition) == 1
+      for: 5m
+      labels:
+        severity: error
+      annotations:
+        summary: No gotk_reconcile_condition metric
+
+    - alert: ReconciliationFailure
+      expr: max(gotk_reconcile_condition{status="False",type="Ready"}) by (namespace, name, kind) + on(namespace, name, kind) (max(gotk_reconcile_condition{status="Deleted"}) by (namespace, name, kind)) * 2 == 1
+      for: 10m
+      labels:
+        severity: error
+      annotations:
+        summary: '{{ $labels.kind }} {{ $labels.namespace }}/{{ $labels.name }} reconciliation has been failing for more than 10 minutes.'

@@ -1,0 +1,46 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: prometheus
+  namespace: prometheus
+spec:
+  groups:
+  - name: prometheus
+    rules:
+    - alert: PrometheusTargetMissing
+      expr: up == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: Target {{ $labels.service }} for pod {{ $labels.pod }} down
+
+    - alert: PrometheusNotConnectedToAlertmanager
+      expr: prometheus_notifications_alertmanagers_discovered{namespace="prometheus"} < 1
+      for: 1m
+      labels:
+        severity: critical
+
+    - alert: PrometheusRuleEvaluationFailures
+      expr: increase(prometheus_rule_evaluation_failures_total[3m]) > 0
+      for: 30s
+      labels:
+        severity: critical
+
+    - alert: PromBadConfig
+      expr: prometheus_config_last_reload_successful{job="prometheus"} == 0
+      for: 30s
+      labels:
+        severity: critical
+
+    - alert: PromAlertmanagerBadConfig
+      expr: alertmanager_config_last_reload_successful{job="alertmanager"} == 0
+      for: 30s
+      labels:
+        severity: critical
+
+    - alert: PromAlertsFailed
+      expr: sum(increase(alertmanager_notifications_failed_total{job="alertmanager"}[5m])) by (namespace) > 0
+      for: 30s
+      labels:
+        severity: critical

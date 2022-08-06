@@ -1,0 +1,102 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nodes
+  namespace: prometheus
+spec:
+  groups:
+  - name: nodes
+    rules:
+    - alert: KubernetesNodeDiskPressure
+      expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+      for: 1m
+      labels:
+        severity: error
+
+    - alert: KubernetesNodeMemoryPressure
+      expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+      for: 1m
+      labels:
+        severity: error
+
+    - alert: HostHighCPUUsage
+      expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+      for: 10m
+      labels:
+        severity: error
+
+    - alert: HostMemoryUsage90pct
+      expr: |
+        100*(1-node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes) > 90
+      for: 2m
+      labels:
+        severity: error
+      annotations:
+        summary: "RAM usage is {{ $value }}% on {{ $labels.instance }}"
+
+    - alert: NodeMemoryUsage95pct
+      expr: |
+        100*(1-node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes) > 95
+      for: 10s
+      labels:
+        severity: critical
+      annotations:
+        summary: "RAM usage is {{ $value }}% on {{ $labels.instance }}"
+
+    - alert: NodeSwapUsage20pct
+      expr: |
+        sum(100 * ((node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / (node_memory_SwapTotal_bytes ))) by (instance) > 20
+      for: 2m
+      labels:
+        severity: error
+      annotations:
+        summary: "SWAP usage is {{ $value }}% on {{ $labels.instance }}"
+      
+    - alert: HostDiskUsage90pct
+      expr: |
+        (100 - 100 * node_filesystem_avail_bytes / node_filesystem_size_bytes) > 90 and ON (instance, device, mountpoint) node_filesystem_readonly == 0
+      for: 5m
+      labels:
+        severity: error
+      annotations:
+        summary: "Disk usage is {{ $value }}% on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+    
+    - alert: HostDiskUsage95pct
+      expr: |
+        (100 - 100 * node_filesystem_avail_bytes / node_filesystem_size_bytes) > 95 and ON (instance, device, mountpoint) node_filesystem_readonly == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Disk usage is {{ $value }}% on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+
+    - alert: OOMKillThree
+      expr: increase(node_vmstat_oom_kill[1h]) > 3
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $value }} OOM killed processes on {{ $labels.instance }}"
+
+    - alert: OOMKillMoreThanThree
+      expr: increase(node_vmstat_oom_kill[1h]) > 10
+      labels:
+        severity: error
+      annotations:
+        summary: "{{ $value }} OOM killed processes on {{ $labels.instance }}"
+
+    - alert: NodeClockSkewDetected
+      expr: |
+        (
+          node_timex_offset_seconds > 0.05
+        and
+          deriv(node_timex_offset_seconds[5m]) >= 0
+        )
+        or
+        (
+          node_timex_offset_seconds < -0.05
+        and
+          deriv(node_timex_offset_seconds[5m]) <= 0
+        )
+      for: 10m
+      labels:
+        severity: warning

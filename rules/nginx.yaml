@@ -1,0 +1,84 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nginx
+  namespace: prometheus
+spec:
+  groups:
+  - name: nginx
+    rules:
+    - alert: NoNginxMetrics
+      expr: absent(nginx_ingress_controller_requests)
+      for: 5m
+      labels:
+        severity: error
+      annotations:
+        summary: "No nginx_ingress_controller_requests metrics"
+
+    - alert: TlsCertExpireIn10d
+      expr: |
+        avg(nginx_ingress_controller_ssl_expire_time_seconds) by (host) - time()
+        < 86400 * 10
+      labels:
+        severity: error
+      annotations:
+        summary: "TLS certificate expires in less than 10 days for {{ $labels.host }}"
+
+    - alert: MoreThanFive5xxIn10Mins
+      expr: |
+        sum(increase(nginx_ingress_controller_requests{controller_class=~"nginx",status=~"5.*"}[10m])) by (ingress)
+        > 5
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $value }} HTTP 5xx in 10mins for {{ $labels.ingress }}"
+
+    - alert: HighErrorRate5xx
+      expr: |
+        sum(rate(nginx_ingress_controller_requests{controller_class="nginx",status!~"5.*"}[2m])) by (ingress)
+        /
+        sum(rate(nginx_ingress_controller_requests{controller_class="nginx"}[2m])) by (ingress)
+        < 0.95
+      for: 2m
+      labels:
+        severity: error
+      annotations:
+        summary: High error rate 5xx for {{ $labels.ingress }} (success {{ $value }}% < 95%)
+
+    - alert: HighErrorCount401
+      expr: |
+        sum(increase(nginx_ingress_controller_requests{controller_class=~"nginx",status="401"}[10m])) by (ingress)
+        > 100
+      for: 2m
+      labels:
+        severity: error
+      annotations:
+        summary: "{{ $value }} HTTP 401 in 10m for {{ $labels.ingress }}"
+    
+    - alert: HighErrorCount403
+      expr: |
+        sum(increase(nginx_ingress_controller_requests{controller_class=~"nginx",status="403"}[10m])) by (ingress)
+        > 100
+      for: 2m
+      labels:
+        severity: error
+      annotations:
+        summary: "{{ $value }} HTTP 403 in 10m for {{ $labels.ingress }}"
+
+    - alert: HighLatency90p20s
+      expr: |
+        histogram_quantile(
+          0.9,
+          sum(
+            rate(
+              nginx_ingress_controller_response_duration_seconds_bucket[5m]
+            )
+          )
+          by (le, ingress)
+        ) > 20
+      for: 5m
+      labels:
+        severity: error
+      annotations:
+        summary: "Latency P90 is {{ $value }}s for {{ $labels.ingress }}"

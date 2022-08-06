@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: velero
+  namespace: prometheus
+spec:
+  groups:
+  - name: velero
+    rules:
+    - alert: NoVeleroMetrics
+      expr: absent(velero_backup_last_successful_timestamp) > 0
+      for: 15m
+      labels:
+        severity: error
+      annotations:
+        summary: No velero metrics
+
+    - alert: NoScheduledBackupIn25h
+      expr: time() - velero_backup_last_successful_timestamp{schedule=~"daily.*"} > 3600*25
+      labels:
+        severity: error
+      annotations:
+        summary: No scheduled backup in 25h for {{ $labels.schedule }}
+
+    - alert: NoScheduledBackupIn3h
+      expr: time() - velero_backup_last_successful_timestamp{schedule=~"hourly.*"} > 3600*3
+      labels:
+        severity: error
+      annotations:
+        summary: No scheduled backup in 3h for {{ $labels.schedule }}
+
+    - alert: VeleroBackupTakesMoreThan50m
+      expr: increase(velero_backup_attempt_total[1h]) - increase(velero_backup_success_total[1h]) > 0
+      labels:
+        severity: error
+      for: 50m
+      annotations:
+        summary: Velero backup takes more than 50m for {{ $labels.schedule }}
